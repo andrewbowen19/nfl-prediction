@@ -1,0 +1,77 @@
+---
+title: "Fantasy Football EDA"
+author: "Andrew Bowen"
+format: html
+editor: visual
+---
+
+## Fantasy EDA
+
+Performing some basic EDA on the fantasy football data we've scraped dating back to 2000
+
+Some questions: - Is pairing your WRs with QBs a winning strategy? - Do RBs on winning teams do better because they have more leads?
+
+### Pairing Quarterbacks and Wide Receivers
+
+One strategy in fantasy is to pair together a quarterback and the top wide receiver from a given team. The thinking being that if they are a dynamic passing attack you'll "double up" on any scores produced by the pair. Here we test that hypothesis
+
+Most players only take the top WR from a team on which their QB plays, so we'll defer to taking only the top WR-QB pairing from each team in a single season
+
+```{r message=FALSE}
+library(tidyverse)
+df <- read.csv("fantasy-scoring.csv")
+```
+
+For simplicity, we're going to make a few assumptions:
+
+-   Only considering QBs and WRs (no TEs/RBs)
+
+```{r filtering}
+df <- df %>% filter(fantpos == "QB" | fantpos == "WR")
+
+df
+```
+
+Get the top WRs and QBs for each team (in the case of injury we'll take the passing/receiving leaders for each team's season in terms of receptions/attempts, respectfully)
+
+```{r}
+all_wrs = df %>% filter(fantpos == "WR")
+all_qbs = df %>% filter(fantpos == "QB")
+
+
+# Get top-performers for each team each season
+wrs <- all_wrs %>% 
+  group_by(year, tm) %>% 
+  mutate(top_receiver = max(fantasy_ppr)) %>% 
+  slice(which.max(fantasy_ppr)) %>% 
+  rename(wr_fantasy_ppr = fantasy_ppr) %>%
+  select(player, wr_fantasy_ppr, tm, year, rank)
+
+qbs <- all_qbs %>%
+  group_by(year, tm) %>%
+  mutate(top_qb = max(fantasy_ppr)) %>%
+  slice(which.max(fantasy_ppr)) %>% 
+  rename(qb_fantasy_ppr = fantasy_ppr) %>%
+  select(player, qb_fantasy_ppr, tm, year, rank)
+```
+
+```{r}
+# Join together QB and wideout data
+dat <- qbs %>% left_join(wrs, by=c("tm", "year"))
+```
+
+First let's just see the comparison between a QB's fantasy points (PPR scoring) and their top Wide Receivers. We'd expect a positive relationship here
+
+```{r}
+# Now let's plot the WR production as a function of QB production - this should be linear
+dat %>% ggplot(aes(x=qb_fantasy_ppr, y = wr_fantasy_ppr)) + geom_point()
+```
+
+Nothing too surprising here, there seems to be a slight positive correlation between the fantasy scoring for a QB and their WR
+
+```{r}
+cor(dat$qb_fantasy_ppr, dat$wr_fantasy_ppr)
+
+```
+
+What's more interesting is if a team's overall record plays in here. There are two schools of thought, one that
